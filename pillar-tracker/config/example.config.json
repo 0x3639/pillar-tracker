@@ -3,5 +3,5 @@
     "telegram_bot_api_key": "",
     "telegram_channel_id": "@some_channel_id",
     "telegram_pinned_message_id": 1,
-    "optional_telegram_dev_chat_id": ""
+    "telegram_dev_chat_id": ""
 }
