@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Ignore config file
+pillar-tracker/**/config.json
+
+# Ignore data store
+pillar-tracker/data_store
