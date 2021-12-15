@@ -5,11 +5,13 @@ import os
 
 from utils.node_rpc_wrapper import NodeRpcWrapper
 from utils.telegram_wrapper import TelegramWrapper
+from utils.discord_wrapper import DiscordWrapper
 
 
-def check_and_send_pillar_events(telegram, cfg, cached_pillars, new_pillars):
+def check_and_send_pillar_events(telegram, discord, cfg, cached_pillars, new_pillars):
     channel_id = cfg['telegram_channel_id']
     dev_chat_id = cfg['telegram_dev_chat_id']
+    discord_webhook_url = cfg['discord_channel_webhook']
 
     # Check for dismantled Pillars. Assume Pillar is dismantled if the owner address is not present anymore in the new data.
     for owner_address in cached_pillars:
@@ -19,10 +21,16 @@ def check_and_send_pillar_events(telegram, cfg, cached_pillars, new_pillars):
             if 'error' in m:
                 handle_error(telegram, dev_chat_id, m['error'])
             else:
-                r = telegram.bot_send_message_to_chat(channel_id, m['message'])
                 name = cached_pillars[owner_address]['name']
+                r = telegram.bot_send_message_to_chat(channel_id, m['message'])
                 print(
-                    f'Pillar dismantled message sent ({name}): {r.status_code}')
+                    f'Pillar dismantled message sent to Telegram ({name}): {r.status_code}')
+
+                if len(discord_webhook_url) > 0:
+                    r = discord.webhook_send_message_to_channel(discord_webhook_url, m['message'])
+                    print(
+                        f'Pillar dismantled message sent to Discord ({name}): {r.status_code}')
+
 
     # Check for new Pillars. Assume Pillar is new if the owner address was not present in the cached data.
     for owner_address in new_pillars:
@@ -32,9 +40,14 @@ def check_and_send_pillar_events(telegram, cfg, cached_pillars, new_pillars):
             if 'error' in m:
                 handle_error(telegram, dev_chat_id, m['error'])
             else:
-                r = telegram.bot_send_message_to_chat(channel_id, m['message'])
                 name = new_pillars[owner_address]['name']
-                print(f'Pillar created message sent ({name}): {r.status_code}')
+
+                r = telegram.bot_send_message_to_chat(channel_id, m['message'])
+                print(f'Pillar created message sent to Telegram ({name}): {r.status_code}')
+
+                if len(discord_webhook_url) > 0:
+                    r = discord.webhook_send_message_to_channel(discord_webhook_url, m['message'])
+                    print(f'Pillar created message sent to Discord ({name}): {r.status_code}')
 
     # Check for Pillar name changes
     for owner_address in new_pillars:
@@ -52,7 +65,12 @@ def check_and_send_pillar_events(telegram, cfg, cached_pillars, new_pillars):
                 else:
                     r = telegram.bot_send_message_to_chat(channel_id, m['message'])
                     print(
-                        f'Pillar name changed message sent ({cached_name} -> {current_name}): {r.status_code}')
+                        f'Pillar name changed message sent to Telegram ({cached_name} -> {current_name}): {r.status_code}')
+
+                    if len(discord_webhook_url) > 0:
+                        r = discord.webhook_send_message_to_channel(discord_webhook_url, m['message'])
+                        print(
+                            f'Pillar name changed message sent to Discord ({cached_name} -> {current_name}): {r.status_code}')
 
     # Check for changes in reward sharing
     for owner_address in new_pillars:
@@ -91,10 +109,15 @@ def check_and_send_pillar_events(telegram, cfg, cached_pillars, new_pillars):
                 if 'error' in m:
                     handle_error(telegram, dev_chat_id, m['error'])
                 else:
-                    r = telegram.bot_send_message_to_chat(channel_id, m['message'])
                     name = new_pillars[owner_address]['name']
+                    r = telegram.bot_send_message_to_chat(channel_id, m['message'])
                     print(
-                        f'Reward share changed message sent ({name}): {r.status_code}')
+                        f'Reward share changed message sent to Telegram ({name}): {r.status_code}')
+
+                    if len(discord_webhook_url) > 0:
+                        r = discord.webhook_send_message_to_channel(discord_webhook_url, m['message'])
+                        print(
+                            f'Reward share changed message sent to Discord ({name}): {r.status_code}')
 
 
 def create_dismantled_pillar_message(pillar_data):
@@ -233,6 +256,7 @@ def main():
     node = NodeRpcWrapper(node_url=cfg['node_url_http'])
     telegram = TelegramWrapper(
         bot_api_key=cfg['telegram_bot_api_key'])
+    discord = DiscordWrapper()
 
     # Get latest momentum
     latest_momentum = node.get_latest_momentum()
@@ -261,12 +285,12 @@ def main():
     else:
         r = telegram.bot_edit_message(
             chat_id=cfg['telegram_channel_id'], message_id=cfg['telegram_pinned_message_id'], message=pinned_stats_message['message'])
-        print(f'Pinned message updated: {r.status_code}')
+        print(f'Pinned message updated on Telegram: {r.status_code}')
 
     # Check for new Pillar events if cached data exists
     if cached_pillar_data is not None:
         check_and_send_pillar_events(
-            telegram, cfg, cached_pillar_data['pillars'], new_pillar_data['pillars'])
+            telegram, discord, cfg, cached_pillar_data['pillars'], new_pillar_data['pillars'])
 
     # Cache current Pillar data to file
     write_to_file_as_json(
