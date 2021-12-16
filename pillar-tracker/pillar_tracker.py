@@ -27,10 +27,10 @@ def check_and_send_pillar_events(telegram, discord, cfg, cached_pillars, new_pil
                     f'Pillar dismantled message sent to Telegram ({name}): {r.status_code}')
 
                 if len(discord_webhook_url) > 0:
-                    r = discord.webhook_send_message_to_channel(discord_webhook_url, m['message'])
+                    r = discord.webhook_send_message_to_channel(
+                        discord_webhook_url, m['message'])
                     print(
                         f'Pillar dismantled message sent to Discord ({name}): {r.status_code}')
-
 
     # Check for new Pillars. Assume Pillar is new if the owner address was not present in the cached data.
     for owner_address in new_pillars:
@@ -43,11 +43,14 @@ def check_and_send_pillar_events(telegram, discord, cfg, cached_pillars, new_pil
                 name = new_pillars[owner_address]['name']
 
                 r = telegram.bot_send_message_to_chat(channel_id, m['message'])
-                print(f'Pillar created message sent to Telegram ({name}): {r.status_code}')
+                print(
+                    f'Pillar created message sent to Telegram ({name}): {r.status_code}')
 
                 if len(discord_webhook_url) > 0:
-                    r = discord.webhook_send_message_to_channel(discord_webhook_url, m['message'])
-                    print(f'Pillar created message sent to Discord ({name}): {r.status_code}')
+                    r = discord.webhook_send_message_to_channel(
+                        discord_webhook_url, m['message'])
+                    print(
+                        f'Pillar created message sent to Discord ({name}): {r.status_code}')
 
     # Check for Pillar name changes
     for owner_address in new_pillars:
@@ -63,12 +66,14 @@ def check_and_send_pillar_events(telegram, discord, cfg, cached_pillars, new_pil
                 if 'error' in m:
                     handle_error(telegram, dev_chat_id, m['error'])
                 else:
-                    r = telegram.bot_send_message_to_chat(channel_id, m['message'])
+                    r = telegram.bot_send_message_to_chat(
+                        channel_id, m['message'])
                     print(
                         f'Pillar name changed message sent to Telegram ({cached_name} -> {current_name}): {r.status_code}')
 
                     if len(discord_webhook_url) > 0:
-                        r = discord.webhook_send_message_to_channel(discord_webhook_url, m['message'])
+                        r = discord.webhook_send_message_to_channel(
+                            discord_webhook_url, m['message'])
                         print(
                             f'Pillar name changed message sent to Discord ({cached_name} -> {current_name}): {r.status_code}')
 
@@ -110,12 +115,14 @@ def check_and_send_pillar_events(telegram, discord, cfg, cached_pillars, new_pil
                     handle_error(telegram, dev_chat_id, m['error'])
                 else:
                     name = new_pillars[owner_address]['name']
-                    r = telegram.bot_send_message_to_chat(channel_id, m['message'])
+                    r = telegram.bot_send_message_to_chat(
+                        channel_id, m['message'])
                     print(
                         f'Reward share changed message sent to Telegram ({name}): {r.status_code}')
 
                     if len(discord_webhook_url) > 0:
-                        r = discord.webhook_send_message_to_channel(discord_webhook_url, m['message'])
+                        r = discord.webhook_send_message_to_channel(
+                            discord_webhook_url, m['message'])
                         print(
                             f'Reward share changed message sent to Discord ({name}): {r.status_code}')
 
@@ -171,7 +178,8 @@ def create_reward_share_changed_message(changed_shares_data):
                 str(old_delegate_percentage) + '% \U000027A1 ' + \
                 str(new_delegate_percentage) + '%'
         else:
-            m = m + 'Delegate rewards sharing: ' + str(old_delegate_percentage) + '%'
+            m = m + 'Delegate rewards sharing: ' + \
+                str(old_delegate_percentage) + '%'
 
         return {'message': m}
 
@@ -183,7 +191,7 @@ def create_pinned_stats_message(pillars, momentum_height):
     try:
         # Only show top 70 Pillars because of Telegram's message character limit (4096 characters)
         if len(pillars) > 70:
-            m = 'Pillar reward sharing rates (top 70)\n' 
+            m = 'Pillar reward sharing rates (top 70)\n'
         else:
             m = 'Pillar reward sharing rates\n'
         m = m + 'Last updated: ' + \
@@ -276,6 +284,9 @@ def main():
     else:
         cached_pillar_data = None
 
+    # Cache current Pillar data to file
+    write_to_file_as_json(new_pillar_data, f'{PILLAR_CACHE_FILE}')
+
     # Create and update the pinned stats message
     pinned_stats_message = create_pinned_stats_message(
         new_pillar_data['pillars'], latest_momentum['height'])
@@ -291,10 +302,6 @@ def main():
     if cached_pillar_data is not None:
         check_and_send_pillar_events(
             telegram, discord, cfg, cached_pillar_data['pillars'], new_pillar_data['pillars'])
-
-    # Cache current Pillar data to file
-    write_to_file_as_json(
-        new_pillar_data, f'{PILLAR_CACHE_FILE}')
 
 
 if __name__ == '__main__':
