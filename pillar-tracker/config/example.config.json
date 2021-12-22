@@ -4,5 +4,6 @@
     "telegram_channel_id": "@some_channel_id",
     "telegram_pinned_message_id": 1,
     "telegram_dev_chat_id": "",
-    "discord_channel_webhook": ""
+    "discord_channel_webhook": "",
+    "reference_reward_address": ""
 }

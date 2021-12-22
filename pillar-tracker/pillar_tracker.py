@@ -2,10 +2,32 @@ import json
 import datetime
 import sys
 import os
+import random
 
 from utils.node_rpc_wrapper import NodeRpcWrapper
 from utils.telegram_wrapper import TelegramWrapper
 from utils.discord_wrapper import DiscordWrapper
+
+
+def check_and_send_reward_collection_message(telegram, discord, cfg, cached_epoch, new_epoch):
+    channel_id = cfg['telegram_channel_id']
+    dev_chat_id = cfg['telegram_dev_chat_id']
+    discord_webhook_url = cfg['discord_channel_webhook']
+
+    if new_epoch > cached_epoch:
+        m = create_reward_collection_message(new_epoch)
+        if 'error' in m:
+            handle_error(telegram, dev_chat_id, m['error'])
+        else:
+            r = telegram.bot_send_message_to_chat(channel_id, m['message'])
+            print(
+                f'Reward collection message sent to Telegram: {r.status_code}')
+
+            if len(discord_webhook_url) > 0:
+                r = discord.webhook_send_message_to_channel(
+                    discord_webhook_url, m['message'])
+                print(
+                    f'Reward collection message sent to Discord: {r.status_code}')
 
 
 def check_and_send_pillar_events(telegram, discord, cfg, cached_pillars, new_pillars):
@@ -13,24 +35,25 @@ def check_and_send_pillar_events(telegram, discord, cfg, cached_pillars, new_pil
     dev_chat_id = cfg['telegram_dev_chat_id']
     discord_webhook_url = cfg['discord_channel_webhook']
 
+    # TODO: Needs work on how to determine a dismantled Pillar.
     # Check for dismantled Pillars. Assume Pillar is dismantled if the owner address is not present anymore in the new data.
-    for owner_address in cached_pillars:
-        if owner_address not in new_pillars and len(new_pillars) < len(cached_pillars):
-            m = create_dismantled_pillar_message(
-                cached_pillars[owner_address])
-            if 'error' in m:
-                handle_error(telegram, dev_chat_id, m['error'])
-            else:
-                name = cached_pillars[owner_address]['name']
-                r = telegram.bot_send_message_to_chat(channel_id, m['message'])
-                print(
-                    f'Pillar dismantled message sent to Telegram ({name}): {r.status_code}')
-
-                if len(discord_webhook_url) > 0:
-                    r = discord.webhook_send_message_to_channel(
-                        discord_webhook_url, m['message'])
-                    print(
-                        f'Pillar dismantled message sent to Discord ({name}): {r.status_code}')
+    # for owner_address in cached_pillars:
+    #    if owner_address not in new_pillars and len(new_pillars) < len(cached_pillars):
+    #        m = create_dismantled_pillar_message(
+    #            cached_pillars[owner_address])
+    #        if 'error' in m:
+    #            handle_error(telegram, dev_chat_id, m['error'])
+    #        else:
+    #            name = cached_pillars[owner_address]['name']
+    #            r = telegram.bot_send_message_to_chat(channel_id, m['message'])
+    #            print(
+    #                f'Pillar dismantled message sent to Telegram ({name}): {r.status_code}')
+    #
+    #            if len(discord_webhook_url) > 0:
+    #                r = discord.webhook_send_message_to_channel(
+    #                    discord_webhook_url, m['message'])
+    #                print(
+    #                    f'Pillar dismantled message sent to Discord ({name}): {r.status_code}')
 
     # Check for new Pillars. Assume Pillar is new if the owner address was not present in the cached data.
     for owner_address in new_pillars:
@@ -215,6 +238,30 @@ def create_pinned_stats_message(pillars, momentum_height):
         return {'error': 'KeyError: create_pinned_stats_message'}
 
 
+def create_reward_collection_message(reward_epoch):
+    try:
+        emoji = get_emoji(reward_epoch)
+        m = 'Rewards for epoch ' + \
+            str(reward_epoch) + ' can now be collected! ' + emoji
+        return {'message': m}
+    except KeyError:
+        return {'error': 'KeyError: create_reward_collection_message'}
+
+
+def get_emoji(epoch):
+    emojis = ['\U0001f300', '\U0001F680', '\U0001F47D', '\U0001F60E',
+              '\U0001F525', '\U0001F389', '\U0001F31F', '\U0001F440']
+    santa = '\U0001F385'
+    alien = '\U0001F47D'
+
+    if epoch == 27:
+        return alien
+    elif epoch == 30:
+        return santa
+
+    return random.choice(emojis)
+
+
 def read_file(file_path):
     f = open(file_path)
     content = json.load(f)
@@ -252,13 +299,20 @@ def main():
     # Pillar cache file
     PILLAR_CACHE_FILE = f'{DATA_STORE_DIR}/pillar_data.json'
 
+    # Epoch cache file
+    EPOCH_CACHE_FILE = f'{DATA_STORE_DIR}/epoch_data.json'
+
     # Check and create data store directory
     if not os.path.exists(DATA_STORE_DIR):
         os.makedirs(DATA_STORE_DIR, exist_ok=True)
 
     # Check and create pillar cache file
-    if not os.path.exists(f'{PILLAR_CACHE_FILE}'):
-        open(f'{PILLAR_CACHE_FILE}', 'w+').close()
+    if not os.path.exists(PILLAR_CACHE_FILE):
+        open(PILLAR_CACHE_FILE, 'w+').close()
+
+    # Check and create epoch cache file
+    if not os.path.exists(EPOCH_CACHE_FILE):
+        open(EPOCH_CACHE_FILE, 'w+').close()
 
     # Create wrappers
     node = NodeRpcWrapper(node_url=cfg['node_url_http'])
@@ -278,14 +332,29 @@ def main():
         handle_error(
             telegram, cfg['telegram_dev_chat_id'], new_pillar_data['error'])
 
+    # Get reward epoch
+    new_epoch_data = node.get_reward_epoch(cfg['reference_reward_address'])
+    if 'error' in new_epoch_data:
+        handle_error(
+            telegram, cfg['telegram_dev_chat_id'], new_epoch_data['error'])
+
     # Get cached Pillar data from file
-    if os.stat(f'{DATA_STORE_DIR}/pillar_data.json').st_size != 0:
-        cached_pillar_data = read_file(f'{DATA_STORE_DIR}/pillar_data.json')
+    if os.stat(PILLAR_CACHE_FILE).st_size != 0:
+        cached_pillar_data = read_file(PILLAR_CACHE_FILE)
     else:
         cached_pillar_data = None
 
+    # Get cached epoch data from file
+    if os.stat(EPOCH_CACHE_FILE).st_size != 0:
+        cached_epoch_data = read_file(EPOCH_CACHE_FILE)
+    else:
+        cached_epoch_data = None
+
     # Cache current Pillar data to file
-    write_to_file_as_json(new_pillar_data, f'{PILLAR_CACHE_FILE}')
+    write_to_file_as_json(new_pillar_data, PILLAR_CACHE_FILE)
+
+    # Cache current epoch data to file
+    write_to_file_as_json(new_epoch_data, EPOCH_CACHE_FILE)
 
     # Create and update the pinned stats message
     pinned_stats_message = create_pinned_stats_message(
@@ -302,6 +371,11 @@ def main():
     if cached_pillar_data is not None:
         check_and_send_pillar_events(
             telegram, discord, cfg, cached_pillar_data['pillars'], new_pillar_data['pillars'])
+
+    # Check if new rewards are available
+    if cached_epoch_data is not None:
+        check_and_send_reward_collection_message(
+            telegram, discord, cfg, cached_epoch_data['epoch'], new_epoch_data['epoch'])
 
 
 if __name__ == '__main__':
