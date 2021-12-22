@@ -36,12 +36,12 @@ class NodeRpcWrapper(object):
             return {'error': f'Bad response: get_all_pillars {r.status_code}'}
 
     def get_reward_epoch(self, address):
-        r = self.__embedded_stake_get_frontier_reward_by_page(address)
+        r = self.__embedded_pillar_get_frontier_reward_by_page(address)
         if r.status_code == 200:
             d = json.loads(r.text)
             if len(d['result']['list']) > 0:
                 try:
-                    return {'epoch': d['result']['list'][0]['epoch'], 'reward': d['result']['list'][0]['qsrAmount'], 'timestamp': str(datetime.datetime.now())}
+                    return {'epoch': d['result']['list'][0]['epoch'], 'reward': d['result']['list'][0]['znnAmount'], 'timestamp': str(datetime.datetime.now())}
                 except KeyError:
                     return {'error': 'KeyError: get_reward_epoch'}
             else:
@@ -57,6 +57,6 @@ class NodeRpcWrapper(object):
         return HttpWrapper.post(self.node_url, {'jsonrpc': '2.0', 'id': 1,
                                                 'method': 'embedded.pillar.getAll', 'params': params})
 
-    def __embedded_stake_get_frontier_reward_by_page(self, address):
+    def __embedded_pillar_get_frontier_reward_by_page(self, address):
         return HttpWrapper.post(self.node_url, {'jsonrpc': '2.0', 'id': 1,
-                                                'method': 'embedded.stake.getFrontierRewardByPage', 'params': [address, 0, 1]})
+                                                'method': 'embedded.pillar.getFrontierRewardByPage', 'params': [address, 0, 1]})
