@@ -30,6 +30,101 @@ def check_and_send_reward_collection_message(telegram, discord, cfg, cached_epoc
                     f'Reward collection message sent to Discord: {r.status_code}')
 
 
+def check_and_send_missed_momentums_message(telegram, discord, cfg, cached_pillars, new_pillars, cached_momentum_status_data, cache_file):
+    channel_id = cfg['telegram_channel_id']
+    dev_chat_id = cfg['telegram_dev_chat_id']
+    discord_webhook_url = cfg['discord_channel_webhook']
+
+    new_momentum_status_data = {}
+    inactive_pillars = []
+    for owner_address in new_pillars:
+        pillar_name = new_pillars[owner_address]['name']
+        missed_momentums_in_a_row = 0
+        is_producing = True
+
+        if owner_address in cached_pillars and owner_address in cached_momentum_status_data:
+
+            # Get the pillar's information from cache
+            missed_momentums_in_a_row = cached_momentum_status_data[owner_address]['missedMomentums']
+            is_producing = cached_momentum_status_data[owner_address]['isProducing']                
+
+            previous_produced_momentums = cached_pillars[
+                owner_address]['currentStats']['producedMomentums']
+            current_produced_momentums = new_pillars[owner_address]['currentStats']['producedMomentums']
+            previous_expected_momentums = cached_pillars[
+                owner_address]['currentStats']['expectedMomentums']
+            current_expected_momentums = new_pillars[owner_address]['currentStats']['expectedMomentums']
+
+            # Handle epoch change
+            if current_produced_momentums == 0 and previous_produced_momentums > 0:
+                if not is_producing:
+                    inactive_pillars.append(owner_address)
+
+            # Handle normal case        
+            else:
+                # Check if pillar has produced new momentums
+                if current_produced_momentums == previous_produced_momentums:
+
+                    # Check if the amount of expected momentums has changed
+                    if current_expected_momentums != previous_expected_momentums:
+                        missed_momentums_in_a_row = missed_momentums_in_a_row + 1
+                        if missed_momentums_in_a_row >= 3:
+                            inactive_pillars.append(owner_address)
+                            is_producing = False
+                    
+                    # If expected mometum amount has not changed and pillar was previously inactive, add to inactive pillars list
+                    elif not is_producing:
+                        inactive_pillars.append(owner_address)
+                
+                # If pillar has produced new momentums set missed momentum count to zero
+                else:
+                    missed_momentums_in_a_row = 0
+                    is_producing = True
+            
+        # Add pillar's new momentum status data
+        new_momentum_status_data[owner_address] = {'name': pillar_name, 'missedMomentums': missed_momentums_in_a_row, 'isProducing': is_producing}  
+    
+    l = []
+    for address in inactive_pillars:
+        if address in new_momentum_status_data:
+            l.append(new_momentum_status_data[address]['name'])
+    if len(l) > 0:
+        print('Inactive pillars: ' + str(l))
+
+    # Save new data
+    write_to_file_as_json({'data': new_momentum_status_data, 'timestamp': str(datetime.datetime.now())}, cache_file)
+
+    for address in inactive_pillars:
+        # Verify the inactive pillar was previously producing momentums until sending message
+        if address in cached_momentum_status_data and cached_momentum_status_data[address]['isProducing']:
+            m = create_pillar_inactive_message(cached_momentum_status_data[address]['name'])
+            if 'error' in m:
+                handle_error(telegram, dev_chat_id, m['error'])
+            else:
+                r = telegram.bot_send_message_to_chat(channel_id, m['message'])
+            print(
+                f'Pillar inactive message sent to Telegram: {r.status_code}')
+            if len(discord_webhook_url) > 0:
+                r = discord.webhook_send_message_to_channel(discord_webhook_url, m['message'])
+                print(
+                    f'Pillar inactive message sent to Discord: {r.status_code}')
+
+    for address in cached_momentum_status_data:
+        # Check if a previously inactive pillar is not in the inactive pillars list anymore
+        if not cached_momentum_status_data[address]['isProducing'] and address not in inactive_pillars:
+            m = create_pillar_active_message(cached_momentum_status_data[address]['name'])
+            if 'error' in m:
+                handle_error(telegram, dev_chat_id, m['error'])
+            else:
+                r = telegram.bot_send_message_to_chat(channel_id, m['message'])
+            print(
+                f'Pillar active again message sent to Telegram: {r.status_code}')
+            if len(discord_webhook_url) > 0:
+                r = discord.webhook_send_message_to_channel(discord_webhook_url, m['message'])
+                print(
+                    f'Pillar active again message sent to Discord: {r.status_code}')
+
+
 def check_and_send_pillar_events(telegram, discord, cfg, cached_pillars, new_pillars):
     channel_id = cfg['telegram_channel_id']
     dev_chat_id = cfg['telegram_dev_chat_id']
@@ -161,7 +256,7 @@ def create_dismantled_pillar_message(pillar_data):
 
 def create_new_pillar_message(pillar_data):
     try:
-        m = 'New Pillar spawned!\n'
+        m = 'New pillar spawned!\n'
         m = m + 'Say hello to ' + pillar_data['name'] + '\n'
         m = m + 'Momentum rewards sharing: ' + \
             str(pillar_data['giveMomentumRewardPercentage']) + '%\n'
@@ -223,7 +318,7 @@ def create_pinned_stats_message(pillars, momentum_height):
         m = m + 'Momentum height: ' + str(momentum_height) + '\n'
         m = m + 'M = momentum reward sharing %\n'
         m = m + 'D = delegate reward sharing %\n'
-        m = m + 'W = Pillar weight (ZNN) \n'
+        m = m + 'W = pillar weight (ZNN) \n'
         m = m + 'P/E = produced/expected momentums\n\n'
 
         for owner_address in pillars:
@@ -247,18 +342,25 @@ def create_reward_collection_message(reward_epoch):
     except KeyError:
         return {'error': 'KeyError: create_reward_collection_message'}
 
+def create_pillar_inactive_message(pillar_name):
+    try:
+        m = 'Heads up! ' + pillar_name + ' has stopped producing momentums.\n'
+        m = m + 'The pillar operator should make sure that everything is running smoothly.'
+        return {'message': m}
+    except KeyError:
+        return {'error': 'KeyError: create_pillar_inactive_message'}
+
+def create_pillar_active_message(pillar_name):
+    try:
+        m = pillar_name + ' is producing momentums as expected again! \U0001F680'
+        return {'message': m}
+    except KeyError:
+        return {'error': 'KeyError: create_pillar_active_message '}
+
 
 def get_emoji(epoch):
     emojis = ['\U0001f300', '\U0001F680', '\U0001F47D', '\U0001F60E',
               '\U0001F525', '\U0001F389', '\U0001F31F', '\U0001F440']
-    santa = '\U0001F385'
-    alien = '\U0001F47D'
-
-    if epoch == 27:
-        return alien
-    elif epoch == 30:
-        return santa
-
     return random.choice(emojis)
 
 
@@ -302,6 +404,9 @@ def main():
     # Epoch cache file
     EPOCH_CACHE_FILE = f'{DATA_STORE_DIR}/epoch_data.json'
 
+    # Momentum status cache file
+    MOMENTUM_STATUS_CACHE_FILE = f'{DATA_STORE_DIR}/momentum_status_data.json'
+
     # Check and create data store directory
     if not os.path.exists(DATA_STORE_DIR):
         os.makedirs(DATA_STORE_DIR, exist_ok=True)
@@ -313,6 +418,10 @@ def main():
     # Check and create epoch cache file
     if not os.path.exists(EPOCH_CACHE_FILE):
         open(EPOCH_CACHE_FILE, 'w+').close()
+
+    # Check and create momentum status cache file
+    if not os.path.exists(MOMENTUM_STATUS_CACHE_FILE):
+        open(MOMENTUM_STATUS_CACHE_FILE, 'w+').close()
 
     # Create wrappers
     node = NodeRpcWrapper(node_url=cfg['node_url_http'])
@@ -350,6 +459,12 @@ def main():
     else:
         cached_epoch_data = None
 
+    # Get cached momentum status data from file
+    if os.stat(MOMENTUM_STATUS_CACHE_FILE).st_size != 0:
+        cached_momentum_status_data = read_file(MOMENTUM_STATUS_CACHE_FILE)
+    else:
+        cached_momentum_status_data = {'data': {}}
+
     # Cache current Pillar data to file
     write_to_file_as_json(new_pillar_data, PILLAR_CACHE_FILE)
 
@@ -376,6 +491,10 @@ def main():
     if cached_epoch_data is not None:
         check_and_send_reward_collection_message(
             telegram, discord, cfg, cached_epoch_data['epoch'], new_epoch_data['epoch'])
+
+    # Check for missed momentums
+    check_and_send_missed_momentums_message(
+            telegram, discord, cfg, cached_pillar_data['pillars'], new_pillar_data['pillars'], cached_momentum_status_data['data'], MOMENTUM_STATUS_CACHE_FILE)
 
 
 if __name__ == '__main__':
