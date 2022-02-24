@@ -493,8 +493,10 @@ def main():
             telegram, discord, cfg, cached_epoch_data['epoch'], new_epoch_data['epoch'])
 
     # Check for missed momentums
-    check_and_send_missed_momentums_message(
-            telegram, discord, cfg, cached_pillar_data['pillars'], new_pillar_data['pillars'], cached_momentum_status_data['data'], MOMENTUM_STATUS_CACHE_FILE)
+    # TODO: Fix so that momentum status cache is stored on first run as well
+    if cached_pillar_data is not None:
+        check_and_send_missed_momentums_message(
+                telegram, discord, cfg, cached_pillar_data['pillars'], new_pillar_data['pillars'], cached_momentum_status_data['data'], MOMENTUM_STATUS_CACHE_FILE)
 
 
 if __name__ == '__main__':
