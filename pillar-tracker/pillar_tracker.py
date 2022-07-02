@@ -68,7 +68,7 @@ def check_and_send_missed_momentums_message(telegram, discord, cfg, cached_pilla
                     # Check if the amount of expected momentums has changed
                     if current_expected_momentums != previous_expected_momentums:
                         missed_momentums_in_a_row = missed_momentums_in_a_row + 1
-                        if missed_momentums_in_a_row >= 3:
+                        if missed_momentums_in_a_row >= 5:
                             inactive_pillars.append(owner_address)
                             is_producing = False
                     
@@ -407,6 +407,9 @@ def main():
     # Momentum status cache file
     MOMENTUM_STATUS_CACHE_FILE = f'{DATA_STORE_DIR}/momentum_status_data.json'
 
+    # Node status file
+    NODE_STATUS_FILE = f'{DATA_STORE_DIR}/node_status_data.json'
+
     # Check and create data store directory
     if not os.path.exists(DATA_STORE_DIR):
         os.makedirs(DATA_STORE_DIR, exist_ok=True)
@@ -423,6 +426,10 @@ def main():
     if not os.path.exists(MOMENTUM_STATUS_CACHE_FILE):
         open(MOMENTUM_STATUS_CACHE_FILE, 'w+').close()
 
+    # Check and create node status file
+    if not os.path.exists(NODE_STATUS_FILE):
+        write_to_file_as_json({'height': 0, 'error': False}, NODE_STATUS_FILE)
+
     # Create wrappers
     node = NodeRpcWrapper(node_url=cfg['node_url_http'])
     telegram = TelegramWrapper(
@@ -434,6 +441,16 @@ def main():
     if 'error' in latest_momentum:
         handle_error(
             telegram, cfg['telegram_dev_chat_id'], latest_momentum['error'])
+
+    node_status = read_file(NODE_STATUS_FILE)
+
+    # Check node status
+    if latest_momentum['height'] > node_status['height'] and not node_status['error']:
+        write_to_file_as_json({'height': latest_momentum['height'], 'error': False}, NODE_STATUS_FILE)
+    else:
+        write_to_file_as_json({'height': latest_momentum['height'], 'error': True}, NODE_STATUS_FILE)
+        handle_error(
+            telegram, cfg['telegram_dev_chat_id'], 'Node is stuck. Running prevented.')
 
     # Get latest Pillar data
     new_pillar_data = node.get_all_pillars()
