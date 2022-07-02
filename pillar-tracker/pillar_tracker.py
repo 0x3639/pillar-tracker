@@ -130,25 +130,24 @@ def check_and_send_pillar_events(telegram, discord, cfg, cached_pillars, new_pil
     dev_chat_id = cfg['telegram_dev_chat_id']
     discord_webhook_url = cfg['discord_channel_webhook']
 
-    # TODO: Needs work on how to determine a dismantled Pillar.
-    # Check for dismantled Pillars. Assume Pillar is dismantled if the owner address is not present anymore in the new data.
-    # for owner_address in cached_pillars:
-    #    if owner_address not in new_pillars and len(new_pillars) < len(cached_pillars):
-    #        m = create_dismantled_pillar_message(
-    #            cached_pillars[owner_address])
-    #        if 'error' in m:
-    #            handle_error(telegram, dev_chat_id, m['error'])
-    #        else:
-    #            name = cached_pillars[owner_address]['name']
-    #            r = telegram.bot_send_message_to_chat(channel_id, m['message'])
-    #            print(
-    #                f'Pillar dismantled message sent to Telegram ({name}): {r.status_code}')
-    #
-    #            if len(discord_webhook_url) > 0:
-    #                r = discord.webhook_send_message_to_channel(
-    #                    discord_webhook_url, m['message'])
-    #                print(
-    #                    f'Pillar dismantled message sent to Discord ({name}): {r.status_code}')
+    # Check for dismantled Pillars. Assume Pillar is dismantled if the owner address is no longer present in the new data.
+    for owner_address in cached_pillars:
+       if owner_address not in new_pillars and len(new_pillars) < len(cached_pillars):
+           m = create_dismantled_pillar_message(
+               cached_pillars[owner_address])
+           if 'error' in m:
+               handle_error(telegram, dev_chat_id, m['error'])
+           else:
+               name = cached_pillars[owner_address]['name']
+               r = telegram.bot_send_message_to_chat(channel_id, m['message'])
+               print(
+                   f'Pillar dismantled message sent to Telegram ({name}): {r.status_code}')
+    
+               if len(discord_webhook_url) > 0:
+                   r = discord.webhook_send_message_to_channel(
+                       discord_webhook_url, m['message'])
+                   print(
+                       f'Pillar dismantled message sent to Discord ({name}): {r.status_code}')
 
     # Check for new Pillars. Assume Pillar is new if the owner address was not present in the cached data.
     for owner_address in new_pillars:
@@ -247,8 +246,7 @@ def check_and_send_pillar_events(telegram, discord, cfg, cached_pillars, new_pil
 
 def create_dismantled_pillar_message(pillar_data):
     try:
-        m = 'Pillar dismantled!\n'
-        m = m + 'Pillar: ' + pillar_data['name']
+        m = pillar_data['name'] + ' has been dismantled.'
         return {'message': m}
     except KeyError:
         return {'error': 'KeyError: create_dismantled_pillar_message'}
@@ -344,15 +342,14 @@ def create_reward_collection_message(reward_epoch):
 
 def create_pillar_inactive_message(pillar_name):
     try:
-        m = 'Heads up! ' + pillar_name + ' has stopped producing momentums.\n'
-        m = m + 'The pillar operator should make sure that everything is running smoothly.'
+        m = pillar_name + ' has stopped producing momentums.'
         return {'message': m}
     except KeyError:
         return {'error': 'KeyError: create_pillar_inactive_message'}
 
 def create_pillar_active_message(pillar_name):
     try:
-        m = pillar_name + ' is producing momentums as expected again! \U0001F680'
+        m = pillar_name + ' is producing momentums again! \U0001F680'
         return {'message': m}
     except KeyError:
         return {'error': 'KeyError: create_pillar_active_message '}
