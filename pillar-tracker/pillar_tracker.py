@@ -132,7 +132,7 @@ def check_and_send_pillar_events(telegram, discord, cfg, cached_pillars, new_pil
 
     # Check for dismantled Pillars. Assume Pillar is dismantled if the owner address is no longer present in the new data.
     for owner_address in cached_pillars:
-       if owner_address not in new_pillars and len(new_pillars) < len(cached_pillars):
+       if owner_address not in new_pillars and len(new_pillars) < len(cached_pillars) and len(new_pillars) > 0:
            m = create_dismantled_pillar_message(
                cached_pillars[owner_address])
            if 'error' in m:
